@@ -1,0 +1,18 @@
+# Binaries
+/fowfss
+/fowfss-zksnark
+*.exe
+
+# Test binaries
+*.test
+
+# Output files
+*.out
+
+# Coverage
+*.prof
+coverage.txt
+
+# Container build artifacts
+/out/
+*.seed

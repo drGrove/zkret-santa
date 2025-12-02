@@ -1,0 +1,46 @@
+name: Go Build and Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.23'
+        cache: true
+
+    - name: Download dependencies
+      run: go mod download
+
+    - name: Verify dependencies
+      run: go mod verify
+
+    - name: Run tests
+      run: go test -v ./...
+
+    - name: Build standard
+      run: make build
+
+    - name: Build zkSNARK
+      run: make build-zksnark
+
+    - name: Check binary sizes
+      run: |
+        ls -lh fowfss fowfss-zksnark
+        echo "Standard: $(stat -c%s fowfss) bytes"
+        echo "zkSNARK: $(stat -c%s fowfss-zksnark) bytes"
