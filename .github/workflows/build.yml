@@ -33,14 +33,14 @@ jobs:
     - name: Run tests
       run: go test -v ./...
 
-    - name: Build standard
-      run: make build
+    - name: Build secret-santa
+      run: make secret-santa
 
-    - name: Build zkSNARK
-      run: make build-zksnark
+    - name: Build zkret-santa
+      run: make zkret-santa
 
     - name: Check binary sizes
       run: |
-        ls -lh fowfss fowfss-zksnark
-        echo "Standard: $(stat -c%s fowfss) bytes"
-        echo "zkSNARK: $(stat -c%s fowfss-zksnark) bytes"
+        ls -lh zkret-santa secret-santa
+        echo "zkSNARK: $(stat -c%s zkret-santa) bytes"
+        echo "Standard: $(stat -c%s secret-santa) bytes"

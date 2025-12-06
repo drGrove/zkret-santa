@@ -12,17 +12,34 @@ permissions:
   id-token: write
 
 jobs:
-  build-secret-santa:
-    name: Build secret-santa (${{ matrix.build-id }})
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        build-id: [1, 2]
+  metadata:
+    name: Build Metadata
     outputs:
       version: ${{ steps.version.outputs.version }}
-
     steps:
     - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Generate metadata
+      id: version
+      run: |
+        version=$(git describe --tags --always --dirty 2>/dev/null || echo "dev")
+        echo "version=${version}" >> ${GITHUB_OUTPUT}
+
+  build:
+    name: Build ${{ matrix.image }} (${{ matrix.build-id }})
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.metadata.outputs.version }}
+    strategy:
+      matrix:
+        image: [secret-santa, zkret-santa]
+        build-id: [1, 2]
+
+    steps:
+    - name: Checkout code
       uses: actions/checkout@v4
       with:
         fetch-depth: 0
@@ -41,245 +58,75 @@ jobs:
     - name: Setup Docker Buildx
       uses: docker/setup-buildx-action@v3
 
-    - name: Generate metadata
-      id: version
+    - name: Set output directory
       run: |
-        version=$(git describe --tags --always --dirty 2>/dev/null || echo "dev")
-        echo "VERSION=${version}" >> ${GITHUB_ENV}
-        echo "OUT_DIR=build-secret-santa-${{ matrix.build-id }}" >> ${GITHUB_ENV}
-        echo "version=${version}" >> ${GITHUB_OUTPUT}
+        echo "OUT_DIR=build-${{ matrix.image }}-${{ matrix.build-id }}" >> ${GITHUB_ENV}
 
-    - name: Build standard image
-      run: make image-secret-santa
+    - name: Build ${{ matrix.image }} image
+      run: make image-${{ matrix.image }}
 
     - name: Generate image digests
       run: |
         echo "Build ${{ matrix.build-id }} digests:"
-        make image-digests-secret-santa
+        make image-digests-${{ matrix.image }}
 
     - name: Upload artifact
       uses: actions/upload-artifact@v5
       with:
-        name: build-secret-santa-${{ matrix.build-id }}
-        path: build-secret-santa-${{ matrix.build-id }}
+        name: build-${{ matrix.image }}-${{ matrix.build-id }}
+        path: build-${{ matrix.image }}-${{ matrix.build-id }}
         retention-days: 7
 
-  build-zkret-santa:
-    name: Build zkret-santa (${{ matrix.build-id }})
+  verify:
+    name: Verify Reproducibility
     runs-on: ubuntu-latest
+    needs: [metadta, build]
+    env:
+      VERSION: ${{ needs.metadata.outputs.version }}
     strategy:
       matrix:
-        build-id: [1, 2]
-    outputs:
-      version: ${{ steps.version.outputs.version }}
+        image: [secret-santa, zkret-santa]
 
     steps:
-    - name: Checkout
-      uses: actions/checkout@v5
-      with:
-        fetch-depth: 0
-
-    - name: Setup Docker
-      uses: docker/setup-docker-action@3fb92d6d9c634363128c8cce4bc3b2826526370a # v4
-      with:
-        daemon-config: |
-          {
-            "debug": true,
-            "features": {
-              "containerd-snapshotter": true
-            }
-          }
-
-    - name: Setup Docker Buildx
-      uses: docker/setup-buildx-action@v3
-
-    - name: Generate metadata
-      id: version
-      run: |
-        version=$(git describe --tags --always --dirty 2>/dev/null || echo "dev")
-        echo "VERSION=${version}" >> ${GITHUB_ENV}
-        echo "OUT_DIR=build-zkret-santa-${{ matrix.build-id }}" >> ${GITHUB_ENV}
-        echo "version=${version}" >> ${GITHUB_OUTPUT}
-
-    - name: Build zkret-santa image
-      run: make image-zkret-santa
-
-    - name: Generate image digests
-      run: |
-        echo "Build ${{ matrix.build-id }} digests:"
-        make image-digests-zkret-santa
-
-    - name: Upload artifact
-      uses: actions/upload-artifact@v5
-      with:
-        name: build-zkret-santa-${{ matrix.build-id }}
-        path: build-zkret-santa-${{ matrix.build-id }}
-        retention-days: 7
-
-  verify-secret-santa:
-    name: Verify secret-santa Build
-    runs-on: ubuntu-latest
-    needs: build-secret-santa
-    outputs:
-      verified: ${{ steps.compare.outputs.verified }}
-
-    steps:
-    - name: Checkout
-      uses: actions/checkout@v5
-      with:
-        fetch-depth: 0
-
-    - name: Download artifacts
-      uses: actions/download-artifact@v5
-      with:
-        pattern: build-secret-santa-*
-        merge-multiple: false
-
-    - name: Compare digests
-      id: compare
-      run: |
-        echo "Comparing digests from both builds..."
-
-        echo "Build 1 digests:"
-        cat build-secret-santa-1/digests-secret-santa.txt
-        echo
-        echo "Build 2 digests:"
-        cat build-secret-santa-2/digests-secret-santa.txt
-        echo
-
-        if cmp -s build-secret-santa-1/digests-secret-santa.txt build-secret-santa-2/digests-secret-santa.txt; then
-          echo "✅ secret-santa build is reproducible!"
-          echo "verified=true" >> $GITHUB_OUTPUT
-        else
-          echo "❌ secret-santa build differs!"
-          echo "Differences:"
-          diff build-secret-santa-1/digests-secret-santa.txt build-secret-santa-2/digests-secret-santa.txt || true
-          echo "verified=false" >> $GITHUB_OUTPUT
-          exit 1
-        fi
-
-  publish-secret-santa:
-    name: Publish secret-santa
-    runs-on: ubuntu-latest
-    needs: [build-secret-santa, verify-secret-santa, verify-zkret-santa]
-    if: needs.verify-secret-santa.outputs.verified == 'true' && needs.verify-zkret-santa.outputs.verified == 'true'
-    env:
-      REPOSITORY: ghcr.io
-
-    steps:
-    - name: Checkout
-      uses: actions/checkout@v5
-      with:
-        fetch-depth: 0
-
-    - name: Download verified build
-      uses: actions/download-artifact@v5
-      with:
-        name: build-secret-santa-1
-
-    - name: Setup Docker
-      uses: docker/setup-docker-action@3fb92d6d9c634363128c8cce4bc3b2826526370a # v4
-      with:
-        daemon-config: |
-          {
-            "debug": true,
-            "features": {
-              "containerd-snapshotter": true
-            }
-          }
-
-    - name: Setup Docker Buildx
-      uses: docker/setup-buildx-action@v3
-
-    - name: Login to GHCR
-      uses: docker/login-action@v3
-      with:
-        registry: ${{ env.REPOSITORY }}
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
-
-    - name: Load and push
-      run: |
-        IMAGE_NAME="${GITHUB_REPOSITORY,,}"
-        VERSION="${{ needs.build-secret-santa.outputs.version }}"
-
-        # Load the OCI image
-        tar -C image-secret-santa -cf - . | docker load
-
-        # Push the version tag
-        IMAGE="${REPOSITORY}/${IMAGE_NAME}:${VERSION}"
-        echo "${IMAGE}"
-        docker push "${IMAGE}"
-
-        # Also tag and push as latest for main branch
-        if [ "${{ github.ref }}" = "refs/heads/main" ]; then
-          docker tag "${REPOSITORY}/${IMAGE_NAME}:${VERSION}" "${REPOSITORY}/${IMAGE_NAME}:latest"
-          docker push "${REPOSITORY}/${IMAGE_NAME}:latest"
-        fi
-
-    - name: Get attestation metadata
-      id: attestation_metadata
-      run: |
-        echo "digest=$(jq -r '.manifests[0].digest' image-secret-santa/index.json)" >> $GITHUB_OUTPUT
-        echo "provenance-subject=${REPOSITORY}/${IMAGE_NAME}" >> $GITHUB_OUTPUT
-
-    - name: Generate version attestation
-      uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3.0.0
-      with:
-        subject-name: ${{ steps.attestation_metadata.outputs.provenance-subject }}:${{ needs.build-zkret-santa.outputs.version }}
-        subject-digest: ${{ steps.attestation_metadata.outputs.digest }}
-        push-to-registry: true
-
-  verify-zkret-santa:
-    name: Verify zkret-santa Build
-    runs-on: ubuntu-latest
-    needs: build-zkret-santa
-    outputs:
-      verified: ${{ steps.compare.outputs.verified }}
-
-    steps:
-    - name: Checkout
+    - name: Checkout code
       uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
 
     - name: Download artifacts
-      uses: actions/download-artifact@v5
+      uses: actions/download-artifact@v4
       with:
-        pattern: build-zkret-santa-*
+        pattern: build-${{ matrix.image }}-*
         merge-multiple: false
 
     - name: Compare digests
-      id: compare
       run: |
         echo "Comparing digests from both builds..."
 
         echo "Build 1 digests:"
-        cat build-zkret-santa-1/digests-zkret-santa.txt
+        cat build-${{ matrix.image }}-1/digests-${{ matrix.image }}.txt
         echo
         echo "Build 2 digests:"
-        cat build-zkret-santa-2/digests-zkret-santa.txt
+        cat build-${{ matrix.image }}-2/digests-${{ matrix.image }}.txt
         echo
 
-        if cmp -s build-zkret-santa-1/digests-zkret-santa.txt build-zkret-santa-2/digests-zkret-santa.txt; then
-          echo "✅ zkret-santa build is reproducible!"
-          echo "verified=true" >> $GITHUB_OUTPUT
+        if cmp -s build-${{ matrix.image }}-1/digests-${{ matrix.image }}.txt build-${{ matrix.image }}-2/digests-${{ matrix.imge }}.txt; then
+          echo "✅ ${{ matrix.image }} build is reproducible!"
         else
-          echo "❌ zkret-santa build differs!"
+          echo "❌ ${{ matrix.image }} build differs!"
           echo "Differences:"
-          diff build-zkret-santa-1/digests-zkret-santa.txt build-zkret-santa-2/digests-zkret-santa.txt || true
-          echo "verified=false" >> $GITHUB_OUTPUT
+          diff build-${{ matrix.image }}-1/digests-${{ matrix.image }}.txt build-${{ matrix.image }}-2/digests-${{ matrix.image }}.txt || true
           exit 1
         fi
 
-  publish-zkret-santa:
-    name: Publish zkret-santa
+  publish:
+    name: Publish ${{ matrix.image }}
     runs-on: ubuntu-latest
-    needs: [build-zkret-santa, verify-zkret-santa, verify-secret-santa]
-    if: needs.verify-secret-santa.outputs.verified == 'true' && needs.verify-zkret-santa.outputs.verified == 'true'
+    needs: [build, verify]
+    strategy:
+      matrix:
+        image: [secret-santa, zkret-santa]
     env:
       REPOSITORY: ghcr.io
-
+      VERSION: ${{ needs.metadata.outputs.version }}
     steps:
     - name: Checkout
       uses: actions/checkout@v4
@@ -289,7 +136,7 @@ jobs:
     - name: Download verified build
       uses: actions/download-artifact@v5
       with:
-        name: build-zkret-santa-1
+        name: build-${{ matrix.image }}-1
 
     - name: Setup Docker
       uses: docker/setup-docker-action@3fb92d6d9c634363128c8cce4bc3b2826526370a # v4
@@ -315,7 +162,6 @@ jobs:
     - name: Load and push
       run: |
         IMAGE_NAME="${GITHUB_REPOSITORY,,}"
-        VERSION="${{ needs.build-zkret-santa.outputs.version }}"
 
         # Load the OCI image
         tar -C image-zkret-santa -cf - . | docker load
@@ -337,9 +183,9 @@ jobs:
         echo "digest=$(jq -r '.manifests[0].digest' image-zkret-santa/index.json)" >> $GITHUB_OUTPUT
         echo "provenance-subject=${REPOSITORY}/${IMAGE_NAME}" >> $GITHUB_OUTPUT
 
-    - name: Generate zkret-santa version attestation
+    - name: Generate ${{ matrix.image }} version attestation
       uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3.0.0
       with:
-        subject-name: ${{ steps.zk_attestation_metadata.outputs.provenance-subject }}:${{ needs.build-zkret-santa.outputs.version }}
-        subject-digest: ${{ steps.zk_attestation_metadata.outputs.digest }}
+        subject-name: ${{ steps.attestation_metadata.outputs.provenance-subject }}:${{ needs.metadata.outputs.version }}
+        subject-digest: ${{ steps.attestation_metadata.outputs.digest }}
         push-to-registry: true
