@@ -81,7 +81,7 @@ jobs:
   verify:
     name: Verify Reproducibility
     runs-on: ubuntu-latest
-    needs: [metadta, build]
+    needs: [metadata, build]
     env:
       VERSION: ${{ needs.metadata.outputs.version }}
     strategy:
@@ -121,7 +121,7 @@ jobs:
   publish:
     name: Publish ${{ matrix.image }}
     runs-on: ubuntu-latest
-    needs: [build, verify]
+    needs: [metadata, build, verify]
     strategy:
       matrix:
         image: [secret-santa, zkret-santa]
