@@ -129,6 +129,8 @@ image-digests: image-digests-$(IMAGE_NAME_STANDARD) image-digests-$(IMAGE_NAME_Z
 show-digests-%: image-digests-%
 	@cat $(OUT)/$*.txt
 
+show-digests: show-digests-$(IMAGE_NAME_STANDARD) show-digests-$(IMAGE_NAME_ZKSNARK)
+
 .PHONY: list
 list:
 	@LC_ALL=C $(MAKE) -pRrq -f $(firstword $(MAKEFILE_LIST)) : 2>/dev/null | awk -v RS= -F: '/(^|\n)# Files(\n|$$)/,/(^|\n)# Finished Make data base/ {if ($$1 !~ "^[#.]") {print $$1}}' | sort | grep -E -v -e '^[^[:alnum:]]' -e '^$@$$'
