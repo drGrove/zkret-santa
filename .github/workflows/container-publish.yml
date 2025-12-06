@@ -61,7 +61,7 @@ jobs:
 
     - name: Set output directory
       run: |
-        echo "OUT_DIR=build-${{ matrix.image }}-${{ matrix.build-id }}" >> ${GITHUB_ENV}
+        echo "OUT=build-${{ matrix.image }}-${{ matrix.build-id }}" >> ${GITHUB_ENV}
 
     - name: Build ${{ matrix.image }} image
       run: make image-${{ matrix.image }}
