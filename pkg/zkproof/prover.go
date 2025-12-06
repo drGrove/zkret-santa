@@ -56,15 +56,18 @@ func Setup() (*SetupKeysWithCS, error) {
 }
 
 // GenerateProof creates a zkSNARK proof that the prover knows the seed
-// that hashes to the given commitment
-func GenerateProof(seed []byte, keys *SetupKeysWithCS) (*ProofData, error) {
+// that, combined with participants hash, produces the given commitment
+func GenerateProof(seed []byte, participantsContent []byte, keys *SetupKeysWithCS) (*ProofData, error) {
 	// Validate seed length (must be 32 bytes = 256 bits)
 	if len(seed) != 32 {
 		return nil, fmt.Errorf("seed must be exactly 32 bytes, got %d", len(seed))
 	}
 
-	// Compute the SHA-256 commitment of the seed
-	commitment := sha256.Sum256(seed)
+	// Compute commitment and participants hash using the new formula
+	commitment, participantsHash, err := ComputeCommitment(seed, participantsContent)
+	if err != nil {
+		return nil, fmt.Errorf("failed to compute commitment: %w", err)
+	}
 
 	// Create the witness (assignment of values to circuit variables)
 	assignment := &SeedCommitmentCircuit{}
@@ -72,6 +75,11 @@ func GenerateProof(seed []byte, keys *SetupKeysWithCS) (*ProofData, error) {
 	// Assign the private input (seed)
 	for i := 0; i < 32; i++ {
 		assignment.Seed[i] = seed[i]
+	}
+
+	// Assign the public input (participants hash)
+	for i := 0; i < 32; i++ {
+		assignment.ParticipantsHash[i] = participantsHash[i]
 	}
 
 	// Assign the public input (commitment)
@@ -92,20 +100,35 @@ func GenerateProof(seed []byte, keys *SetupKeysWithCS) (*ProofData, error) {
 	}
 
 	return &ProofData{
-		Proof:        proof,
-		VerifyingKey: keys.VerifyingKey,
-		Commitment:   commitment[:],
-		Curve:        ecc.BN254,
+		Proof:            proof,
+		VerifyingKey:     keys.VerifyingKey,
+		Commitment:       commitment,
+		ParticipantsHash: participantsHash,
+		Curve:            ecc.BN254,
 	}, nil
 }
 
-// ComputeCommitment computes the SHA-256 hash of the seed
-// This is the public commitment that will be verified
-func ComputeCommitment(seed []byte) ([]byte, error) {
+// ComputeCommitment computes the commitment using the formula:
+// commitment = SHA256(hex(seed) + hex(SHA256(participantsContent)))
+func ComputeCommitment(seed []byte, participantsContent []byte) ([]byte, []byte, error) {
 	if len(seed) != 32 {
-		return nil, fmt.Errorf("seed must be exactly 32 bytes, got %d", len(seed))
+		return nil, nil, fmt.Errorf("seed must be exactly 32 bytes, got %d", len(seed))
 	}
 
-	commitment := sha256.Sum256(seed)
-	return commitment[:], nil
+	// Step 1: Compute SHA-256 hash of participants content
+	participantsHash := sha256.Sum256(participantsContent)
+
+	// Step 2: Convert seed to hex string
+	seedHex := fmt.Sprintf("%x", seed)
+
+	// Step 3: Convert participantsHash to hex string
+	participantsHashHex := fmt.Sprintf("%x", participantsHash[:])
+
+	// Step 4: Concatenate hex strings
+	combined := seedHex + participantsHashHex
+
+	// Step 5: Compute SHA-256 of concatenated hex string
+	commitment := sha256.Sum256([]byte(combined))
+
+	return commitment[:], participantsHash[:], nil
 }

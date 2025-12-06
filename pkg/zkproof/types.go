@@ -17,18 +17,21 @@ type ProofData struct {
 	Proof plonk.Proof
 	// VerifyingKey is the verification key
 	VerifyingKey plonk.VerifyingKey
-	// Commitment is the public SHA-256 hash of the seed
+	// Commitment is the public SHA-256 hash of hex(seed) + hex(participantsHash)
 	Commitment []byte
+	// ParticipantsHash is the SHA-256 hash of the participants file content
+	ParticipantsHash []byte
 	// Curve is the elliptic curve used (BN254)
 	Curve ecc.ID
 }
 
 // SerializableProof is a JSON-serializable representation of the proof
 type SerializableProof struct {
-	Proof        string `json:"proof"`
-	VerifyingKey string `json:"verifying_key"`
-	Commitment   string `json:"commitment"`
-	Curve        string `json:"curve"`
+	Proof            string `json:"proof"`
+	VerifyingKey     string `json:"verifying_key"`
+	Commitment       string `json:"commitment"`
+	ParticipantsHash string `json:"participants_hash"`
+	Curve            string `json:"curve"`
 }
 
 // ToSerializable converts ProofData to SerializableProof for JSON export
@@ -48,10 +51,11 @@ func (pd *ProofData) ToSerializable() (*SerializableProof, error) {
 	}
 
 	return &SerializableProof{
-		Proof:        hex.EncodeToString(proofBuf.Bytes()),
-		VerifyingKey: hex.EncodeToString(vkBuf.Bytes()),
-		Commitment:   hex.EncodeToString(pd.Commitment),
-		Curve:        pd.Curve.String(),
+		Proof:            hex.EncodeToString(proofBuf.Bytes()),
+		VerifyingKey:     hex.EncodeToString(vkBuf.Bytes()),
+		Commitment:       hex.EncodeToString(pd.Commitment),
+		ParticipantsHash: hex.EncodeToString(pd.ParticipantsHash),
+		Curve:            pd.Curve.String(),
 	}, nil
 }
 
@@ -87,10 +91,17 @@ func FromSerializable(sp *SerializableProof) (*ProofData, error) {
 		return nil, err
 	}
 
+	// Decode participants hash
+	participantsHash, err := hex.DecodeString(sp.ParticipantsHash)
+	if err != nil {
+		return nil, err
+	}
+
 	return &ProofData{
-		Proof:        proof,
-		VerifyingKey: vk,
-		Commitment:   commitment,
-		Curve:        ecc.BN254,
+		Proof:            proof,
+		VerifyingKey:     vk,
+		Commitment:       commitment,
+		ParticipantsHash: participantsHash,
+		Curve:            ecc.BN254,
 	}, nil
 }

@@ -3,6 +3,7 @@
 package zkproof
 
 import (
+	"crypto/sha256"
 	"fmt"
 
 	"github.com/consensys/gnark-crypto/ecc"
@@ -10,7 +11,7 @@ import (
 	"github.com/consensys/gnark/frontend"
 )
 
-// VerifyProof verifies a zkSNARK proof against a commitment
+// VerifyProof verifies a zkSNARK proof against a commitment and participants hash
 // Returns true if the proof is valid, false otherwise
 func VerifyProof(proofData *ProofData) (bool, error) {
 	// Validate inputs
@@ -20,9 +21,17 @@ func VerifyProof(proofData *ProofData) (bool, error) {
 	if len(proofData.Commitment) != 32 {
 		return false, fmt.Errorf("commitment must be 32 bytes, got %d", len(proofData.Commitment))
 	}
+	if len(proofData.ParticipantsHash) != 32 {
+		return false, fmt.Errorf("participants hash must be 32 bytes, got %d", len(proofData.ParticipantsHash))
+	}
 
-	// Create the public witness (only the commitment, not the seed)
+	// Create the public witness (participants hash and commitment, not the seed)
 	publicAssignment := &SeedCommitmentCircuit{}
+
+	// Assign the public input (participants hash)
+	for i := 0; i < 32; i++ {
+		publicAssignment.ParticipantsHash[i] = proofData.ParticipantsHash[i]
+	}
 
 	// Assign the public input (commitment)
 	for i := 0; i < 32; i++ {
@@ -44,17 +53,21 @@ func VerifyProof(proofData *ProofData) (bool, error) {
 	return true, nil
 }
 
-// VerifyProofWithCommitment verifies a proof and checks the commitment matches expected value
-func VerifyProofWithCommitment(proofData *ProofData, expectedCommitment []byte) (bool, error) {
-	// First verify the commitment matches
-	if len(expectedCommitment) != 32 {
-		return false, fmt.Errorf("expected commitment must be 32 bytes, got %d", len(expectedCommitment))
+// VerifyProofWithCommitment verifies a proof and checks the participants hash matches the provided participants content
+func VerifyProofWithCommitment(proofData *ProofData, participantsContent []byte) (bool, error) {
+	// Compute the expected participants hash from the provided content
+	expectedParticipantsHash := sha256.Sum256(participantsContent)
+
+	// Verify the participants hash matches
+	if len(proofData.ParticipantsHash) != 32 {
+		return false, fmt.Errorf("proof participants hash must be 32 bytes, got %d", len(proofData.ParticipantsHash))
 	}
 
-	// Check if commitments match
+	// Check if participants hashes match
 	for i := 0; i < 32; i++ {
-		if proofData.Commitment[i] != expectedCommitment[i] {
-			return false, fmt.Errorf("commitment mismatch at byte %d", i)
+		if proofData.ParticipantsHash[i] != expectedParticipantsHash[i] {
+			return false, fmt.Errorf("participants hash mismatch at byte %d: proof has %x, expected %x",
+				i, proofData.ParticipantsHash[i], expectedParticipantsHash[i])
 		}
 	}
 
