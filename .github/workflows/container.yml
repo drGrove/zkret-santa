@@ -10,6 +10,7 @@ env:
 jobs:
   metadata:
     name: Build Metadata
+    runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
