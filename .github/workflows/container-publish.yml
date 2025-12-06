@@ -109,7 +109,7 @@ jobs:
         cat build-${{ matrix.image }}-2/${{ matrix.image }}.txt
         echo
 
-        if cmp -s build-${{ matrix.image }}-1/${{ matrix.image }}.txt build-${{ matrix.image }}-2/${{ matrix.imge }}.txt; then
+        if cmp -s build-${{ matrix.image }}-1/${{ matrix.image }}.txt build-${{ matrix.image }}-2/${{ matrix.image }}.txt; then
           echo "✅ ${{ matrix.image }} build is reproducible!"
         else
           echo "❌ ${{ matrix.image }} build differs!"
