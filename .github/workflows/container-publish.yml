@@ -103,18 +103,18 @@ jobs:
         echo "Comparing digests from both builds..."
 
         echo "Build 1 digests:"
-        cat build-${{ matrix.image }}-1/digests-${{ matrix.image }}.txt
+        cat build-${{ matrix.image }}-1/${{ matrix.image }}.txt
         echo
         echo "Build 2 digests:"
-        cat build-${{ matrix.image }}-2/digests-${{ matrix.image }}.txt
+        cat build-${{ matrix.image }}-2/${{ matrix.image }}.txt
         echo
 
-        if cmp -s build-${{ matrix.image }}-1/digests-${{ matrix.image }}.txt build-${{ matrix.image }}-2/digests-${{ matrix.imge }}.txt; then
+        if cmp -s build-${{ matrix.image }}-1/${{ matrix.image }}.txt build-${{ matrix.image }}-2/${{ matrix.imge }}.txt; then
           echo "✅ ${{ matrix.image }} build is reproducible!"
         else
           echo "❌ ${{ matrix.image }} build differs!"
           echo "Differences:"
-          diff build-${{ matrix.image }}-1/digests-${{ matrix.image }}.txt build-${{ matrix.image }}-2/digests-${{ matrix.image }}.txt || true
+          diff build-${{ matrix.image }}-1/${{ matrix.image }}.txt build-${{ matrix.image }}-2/${{ matrix.image }}.txt || true
           exit 1
         fi
 
@@ -171,12 +171,6 @@ jobs:
         IMAGE="${REPOSITORY}/${IMAGE_NAME}:${VERSION}"
         echo "${IMAGE}"
         docker push "${IMAGE}"
-
-        # Also tag and push as latest for main branch
-        if [ "${{ github.ref }}" = "refs/heads/main" ]; then
-          docker tag "${REPOSITORY}/${IMAGE_NAME}:${VERSION}" "${REPOSITORY}/${IMAGE_NAME}:latest"
-          docker push "${REPOSITORY}/${IMAGE_NAME}:latest"
-        fi
 
     - name: Get attestation metadata
       id: attestation_metadata
